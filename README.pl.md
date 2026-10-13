@@ -10,7 +10,7 @@ GIF przedstawia wybrane klatki dłuższego wyszukiwania. Tryb Step rozwija jedn�
 
 PathExperiment to aplikacja desktopowa w C++20 do rysowania ważonych map, obserwowania wyszukiwania krok po kroku i porównywania algorytmów w tych samych warunkach. Rdzeń wyszukiwania nie zależy od SFML, dlatego projekt jest zarówno narzędziem edukacyjnym, jak i prototypem przyszłej nawigacji jednostek w Ribterra.
 
-[Strona najnowszego wydania](https://github.com/fipsyatina/PathExperiment/releases/latest) będzie zawierać gotowe pakiety, gdy wydanie zostanie opublikowane. Interfejs aplikacji jest angielski.
+[Pobierz wersję dla Windows](https://github.com/fipsyatina/PathExperiment/releases/latest), rozpakuj ZIP i uruchom `PathExperiment.exe`. Interfejs aplikacji jest angielski.
 
 ## Zaimplementowane funkcje
 
@@ -215,7 +215,7 @@ Algorytm jest rozszerzeniem źródłowym: zaimplementuj `ISearchSession`, utwór
 
 `pathx_core` obejmuje siatkę, sesje, rejestr, wyniki, benchmark i zapis bez nagłówków SFML. Warstwa aplikacji odpowiada za edycję, wejście, czas i renderowanie. Pozwala to testować rdzeń bez okna i później dodać adapter Ribterra bez modyfikowania jej repozytorium teraz.
 
-Więcej: [Architecture](docs/ARCHITECTURE.md), [Adding algorithms](docs/ADDING_ALGORITHMS.md), [Verification](docs/VERIFICATION.md). README nie uznaje nieopublikowanego wydania ani niezaobserwowanego przebiegu CI za udany.
+Więcej: [Architecture](docs/ARCHITECTURE.md), [Adding algorithms](docs/ADDING_ALGORITHMS.md), [Verification](docs/VERIFICATION.md). CI buduje rdzeń na Linuksie, a aplikację na Windows.
 
 Źródła: [CS188 — uninformed search](https://inst.eecs.berkeley.edu/~cs188/textbook/search/uninformed.html), [CS188 — informed search](https://inst.eecs.berkeley.edu/~cs188/textbook/search/informed.html), [oficjalny szablon SFML](https://github.com/SFML/cmake-sfml-project), [dokumentacja CMake](https://cmake.org/cmake/help/latest/manual/cmake.1.html).
 

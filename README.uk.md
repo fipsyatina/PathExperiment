@@ -10,7 +10,7 @@ GIF показує вибрані кадри тривалого пошуку. Р
 
 PathExperiment — настільний C++20 застосунок для створення зважених карт, покрокового спостереження за пошуком маршруту та порівняння алгоритмів за однакових умов. Пошукове ядро не залежить від SFML, тому проєкт є і наочним навчальним інструментом, і стендом для майбутньої навігації юнітів у Ribterra.
 
-[Відкрити сторінку останнього релізу](https://github.com/fipsyatina/PathExperiment/releases/latest), де з'являться готові пакети після публікації. Мова інтерфейсу застосунку — англійська.
+[Завантажити версію для Windows](https://github.com/fipsyatina/PathExperiment/releases/latest), розпакувати ZIP і запустити `PathExperiment.exe`. Мова інтерфейсу застосунку — англійська.
 
 ## Можливості
 
@@ -246,7 +246,7 @@ PATHEXPERIMENT 1
 
 `pathx_core` містить сітку, пошукові сесії, реєстр, результати, вимірювання та зберігання без заголовків SFML. Шар застосунку відповідає за редагування, ввід, час і відображення. Так ядро тестується без вікна, а майбутній адаптер Ribterra зможе використати модель без змін її репозиторію зараз.
 
-Докладніше: [Architecture](docs/ARCHITECTURE.md), [Adding algorithms](docs/ADDING_ALGORITHMS.md) і [Verification](docs/VERIFICATION.md). README не називає успішними неопублікований реліз або неперевірений запуск CI.
+Докладніше: [Architecture](docs/ARCHITECTURE.md), [Adding algorithms](docs/ADDING_ALGORITHMS.md) і [Verification](docs/VERIFICATION.md). CI збирає ядро на Linux, а застосунок — на Windows.
 
 Первинні джерела: [CS188 — uninformed search](https://inst.eecs.berkeley.edu/~cs188/textbook/search/uninformed.html), [CS188 — informed search](https://inst.eecs.berkeley.edu/~cs188/textbook/search/informed.html), [офіційний шаблон SFML](https://github.com/SFML/cmake-sfml-project), [довідник CMake](https://cmake.org/cmake/help/latest/manual/cmake.1.html).
 

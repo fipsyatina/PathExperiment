@@ -10,7 +10,7 @@ The GIF samples a long search. Live Step mode expands one cell at a time.
 
 PathExperiment is a C++20 desktop workbench for drawing weighted grid maps, watching pathfinding one expansion at a time, and comparing algorithms under identical conditions. Its search core is independent of SFML, so the project is both a visual learning tool and a practical prototype for future unit navigation in Ribterra.
 
-[Open the latest release page](https://github.com/fipsyatina/PathExperiment/releases/latest) for packaged builds when a release is available. The application interface is in English.
+[Download the Windows build](https://github.com/fipsyatina/PathExperiment/releases/latest), extract the ZIP, and run `PathExperiment.exe`. The application interface is in English.
 
 ## What is implemented
 
@@ -242,7 +242,7 @@ The extension boundary is intentionally C++ rather than runtime DLL discovery or
 
 `pathx_core` owns the grid, search sessions, registry, results, benchmarking, and storage without including SFML headers. The application layer owns editing, input, timing, and rendering. This boundary allows headless correctness tests and lets a future Ribterra adapter reuse the model without modifying the Ribterra repository today.
 
-Read [Architecture](docs/ARCHITECTURE.md), [Adding algorithms](docs/ADDING_ALGORITHMS.md), and [Verification](docs/VERIFICATION.md) for the detailed contracts and current evidence. The CI workflow builds the headless core on Linux and the application on Windows; this README does not claim that an unpublished release or an unobserved CI run succeeded.
+Read [Architecture](docs/ARCHITECTURE.md), [Adding algorithms](docs/ADDING_ALGORITHMS.md), and [Verification](docs/VERIFICATION.md) for the detailed contracts and current evidence. The CI workflow builds the headless core on Linux and the application on Windows.
 
 ## Sources
 
