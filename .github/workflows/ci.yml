@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-core:
+    name: Linux core (${{ matrix.build_type }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DPATHEXPERIMENT_BUILD_APP=OFF
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  windows-app:
+    name: Windows application
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPATHEXPERIMENT_ENABLE_GUI_TESTS=ON
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Install portable application
+        run: cmake --install build --config Release --prefix dist/PathExperiment
+      - name: Upload smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PathExperiment-smoke
+          path: build/artifacts/
+      - name: Upload portable application
+        uses: actions/upload-artifact@v4
+        with:
+          name: PathExperiment-windows
+          path: dist/PathExperiment/

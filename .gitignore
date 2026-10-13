@@ -1,0 +1,9 @@
+/build*/
+/dist/
+/artifacts/
+/saved-maps/
+/.omx/
+/.vs/
+/.vscode/
+CMakeUserPresets.json
+*.user

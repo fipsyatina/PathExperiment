@@ -1,0 +1,9 @@
+* text=auto
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.cmake text eol=lf
+*.md text eol=lf
+*.pemap text eol=lf
+*.png binary
+*.gif binary
+*.ttf binary
