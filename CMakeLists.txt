@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(PathExperiment VERSION 0.1.0 LANGUAGES CXX)
+project(PathExperiment VERSION 0.2.0 LANGUAGES CXX)
 
 option(PATHEXPERIMENT_BUILD_APP "Build the SFML desktop application" ON)
 option(PATHEXPERIMENT_BUILD_TESTS "Build headless correctness tests" ON)
@@ -17,7 +17,9 @@ endforeach()
 add_library(pathx_core
     src/core/Grid.cpp
     src/core/Search.cpp
-    src/core/MapStorage.cpp)
+    src/core/MapStorage.cpp
+    src/core/AlgorithmRegistry.cpp
+    src/algorithms/CustomAlgorithms.cpp)
 target_include_directories(pathx_core PUBLIC include)
 target_compile_features(pathx_core PUBLIC cxx_std_20)
 
@@ -36,6 +38,9 @@ if(PATHEXPERIMENT_BUILD_TESTS)
     target_link_libraries(pathx_tests PRIVATE pathx_core)
     pathx_warnings(pathx_tests)
     add_test(NAME pathx_core_correctness COMMAND pathx_tests)
+    add_library(pathx_custom_example OBJECT examples/CustomAlgorithmExample.cpp)
+    target_link_libraries(pathx_custom_example PRIVATE pathx_core)
+    pathx_warnings(pathx_custom_example)
 endif()
 
 if(PATHEXPERIMENT_BUILD_APP)
@@ -77,12 +82,15 @@ if(PATHEXPERIMENT_BUILD_APP)
         endif()
     endif()
 
+    find_package(OpenGL REQUIRED)
     add_executable(PathExperiment src/app/main.cpp src/app/Application.cpp src/app/Renderer.cpp)
-    target_link_libraries(PathExperiment PRIVATE pathx_core SFML::Graphics)
+    target_link_libraries(PathExperiment PRIVATE pathx_core SFML::Graphics OpenGL::GL)
     pathx_warnings(PathExperiment)
     if(WIN32)
         target_link_libraries(PathExperiment PRIVATE comdlg32)
-        target_link_options(PathExperiment PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+        if(MSVC)
+            target_link_options(PathExperiment PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+        endif()
     endif()
     add_custom_command(TARGET PathExperiment POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:PathExperiment>/assets"
@@ -95,5 +103,5 @@ if(PATHEXPERIMENT_BUILD_APP)
     endif()
     install(TARGETS PathExperiment RUNTIME DESTINATION .)
     install(DIRECTORY assets maps docs DESTINATION .)
-    install(FILES README.md LICENSE DESTINATION .)
+    install(FILES README.md README.pl.md README.uk.md LICENSE DESTINATION .)
 endif()

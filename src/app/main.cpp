@@ -11,8 +11,11 @@ int main(int argc, char** argv) {
         if (argc == 3 && std::string(argv[1]) == "--record-demo") {
             return application.recordDemo(argv[2]);
         }
+        if (argc == 3 && std::string(argv[1]) == "--record-algorithms") {
+            return application.recordAlgorithms(argv[2]);
+        }
         if (argc != 1) {
-            std::cerr << "Usage: PathExperiment [--smoke-test DIR | --record-demo DIR]\n";
+            std::cerr << "Usage: PathExperiment [--smoke-test DIR | --record-demo DIR | --record-algorithms DIR]\n";
             return 2;
         }
         return application.run();

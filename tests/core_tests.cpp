@@ -1,3 +1,4 @@
+#include "pathexperiment/AlgorithmRegistry.hpp"
 #include "pathexperiment/Grid.hpp"
 #include "pathexperiment/MapStorage.hpp"
 #include "pathexperiment/Search.hpp"
@@ -9,6 +10,7 @@
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -20,6 +22,8 @@
 namespace {
 
 using pathx::Algorithm;
+using pathx::AlgorithmDescriptor;
+using pathx::AlgorithmRegistry;
 using pathx::EvaluationKind;
 using pathx::Grid;
 using pathx::Map;
@@ -28,6 +32,30 @@ using pathx::SearchResult;
 using pathx::SearchSession;
 using pathx::SearchStatus;
 using pathx::Terrain;
+
+class DelegatingSearchSession final : public pathx::ISearchSession {
+public:
+    DelegatingSearchSession(Map map, const bool recordEvents)
+        : delegate_(std::move(map), Algorithm::Dijkstra, recordEvents) {}
+
+    const pathx::SearchStep& step() override { return delegate_.step(); }
+    [[nodiscard]] const Map& map() const noexcept override { return delegate_.map(); }
+    [[nodiscard]] const std::vector<pathx::NodeData>& nodes() const noexcept override {
+        return delegate_.nodes();
+    }
+    [[nodiscard]] const pathx::SearchStep& lastStep() const noexcept override {
+        return delegate_.lastStep();
+    }
+    [[nodiscard]] const SearchResult& result() const noexcept override {
+        return delegate_.result();
+    }
+    [[nodiscard]] std::vector<Point> currentPath() const override {
+        return delegate_.currentPath();
+    }
+
+private:
+    pathx::SearchSession delegate_;
+};
 
 [[noreturn]] void fail(std::string_view expression, std::string_view file, int line) {
     throw std::runtime_error(
@@ -300,6 +328,166 @@ void testSeededRandomMapsMatchBellmanFordOracle() {
     }
 }
 
+void testDefaultMapUsesOneHundredTwentyByEightyGrid() {
+    const Map map;
+    CHECK(map.grid.width() == 120);
+    CHECK(map.grid.height() == 80);
+    CHECK((map.start == Point{8, 40}));
+    CHECK((map.goal == Point{111, 40}));
+}
+
+void testBreadthFirstChoosesMinimumHopsDespiteHigherWeightedCost() {
+    Map map = roadMap(5, 3, {0, 1}, {4, 1});
+    for (int x = 1; x < 4; ++x) {
+        map.grid.set({x, 1}, Terrain::Swamp);
+    }
+
+    const SearchResult breadthFirst = pathx::solve(map, Algorithm::BreadthFirst);
+    const SearchResult dijkstra = pathx::solve(map, Algorithm::Dijkstra);
+    validateFoundPath(map, breadthFirst);
+    validateFoundPath(map, dijkstra);
+    CHECK(breadthFirst.steps() == 4);
+    CHECK(dijkstra.steps() == 6);
+    CHECK(breadthFirst.cost > dijkstra.cost);
+}
+
+void testGreedyReturnsLegalRouteWithoutLowestCostGuarantee() {
+    Map map = roadMap(5, 3, {0, 1}, {4, 1});
+    for (int x = 1; x < 4; ++x) {
+        map.grid.set({x, 1}, Terrain::Swamp);
+    }
+
+    const SearchResult greedy = pathx::solve(map, Algorithm::GreedyBestFirst);
+    const SearchResult dijkstra = pathx::solve(map, Algorithm::Dijkstra);
+    validateFoundPath(map, greedy);
+    CHECK(greedy.cost > dijkstra.cost);
+}
+
+void testBreadthFirstAndGreedyReportNoPath() {
+    Map map = roadMap(3, 3, {0, 0}, {1, 1});
+    for (const Point wall : std::array<Point, 4>{{{1, 0}, {0, 1}, {2, 1}, {1, 2}}}) {
+        map.grid.set(wall, Terrain::Wall);
+    }
+
+    for (const Algorithm algorithm : {Algorithm::BreadthFirst, Algorithm::GreedyBestFirst}) {
+        const SearchResult result = pathx::solve(map, algorithm);
+        CHECK(result.status == SearchStatus::NoPath);
+        CHECK(result.path.empty());
+        CHECK(result.cost == -1);
+    }
+}
+
+void testBreadthFirstAndGreedyHandleSharedEndpoint() {
+    const Map map = roadMap(3, 3, {1, 1}, {1, 1});
+    for (const Algorithm algorithm : {Algorithm::BreadthFirst, Algorithm::GreedyBestFirst}) {
+        const SearchResult result = pathx::solve(map, algorithm);
+        CHECK(result.status == SearchStatus::Found);
+        CHECK(result.steps() == 0);
+        CHECK(result.cost == 0);
+        CHECK((result.path == std::vector<Point>{{1, 1}}));
+    }
+}
+
+void testDefaultRegistryProvidesFourBuiltinAlgorithms() {
+    const AlgorithmRegistry registry = pathx::makeDefaultRegistry();
+    const auto& algorithms = registry.algorithms();
+    CHECK(algorithms.size() == 4);
+    CHECK(algorithms[0].id == "dijkstra");
+    CHECK(algorithms[1].id == "astar");
+    CHECK(algorithms[2].id == "bfs");
+    CHECK(algorithms[3].id == "greedy");
+    CHECK(algorithms[0].guaranteesLowestCost);
+    CHECK(algorithms[1].guaranteesLowestCost);
+    CHECK(!algorithms[2].guaranteesLowestCost);
+    CHECK(!algorithms[3].guaranteesLowestCost);
+}
+
+void testEveryDefaultDescriptorCreatesSessionAndFindsLegalRoute() {
+    const AlgorithmRegistry registry = pathx::makeDefaultRegistry();
+    const Map map = roadMap(5, 4, {0, 0}, {4, 3});
+    for (const AlgorithmDescriptor& descriptor : registry.algorithms()) {
+        CHECK(static_cast<bool>(descriptor.create));
+        auto session = descriptor.create(map, true);
+        CHECK(static_cast<bool>(session));
+        CHECK(session->result().status == SearchStatus::Searching);
+        validateFoundPath(map, pathx::solve(map, descriptor));
+    }
+}
+
+void testRegistryRejectsDuplicateIdentifier() {
+    AlgorithmRegistry registry;
+    const auto factory = [](Map map, const bool recordEvents) {
+        return std::make_unique<pathx::SearchSession>(
+            std::move(map), Algorithm::Dijkstra, recordEvents);
+    };
+    registry.add({"custom", "Custom", "", "g", true, factory});
+    checkThrows([&] { registry.add({"custom", "Other", "", "g", true, factory}); });
+}
+
+void testRegistryRejectsEmptyIdentifier() {
+    AlgorithmRegistry registry;
+    checkThrows([&] {
+        registry.add({"", "Custom", "", "g", true, [](Map map, const bool recordEvents) {
+                          return std::make_unique<pathx::SearchSession>(
+                              std::move(map), Algorithm::Dijkstra, recordEvents);
+                      }});
+    });
+}
+
+void testRegistryRejectsMissingFactory() {
+    AlgorithmRegistry registry;
+    checkThrows([&] { registry.add({"custom", "Custom", "", "g", true, {}}); });
+}
+
+void testRegistryRejectsUnknownIdentifierLookup() {
+    const AlgorithmRegistry registry = pathx::makeDefaultRegistry();
+    checkThrows([&] { static_cast<void>(registry.get("missing")); });
+}
+
+void testDescriptorSolveUsesInjectedSessionFactory() {
+    const auto creations = std::make_shared<int>(0);
+    const auto eventFlags = std::make_shared<std::vector<bool>>();
+    const AlgorithmDescriptor descriptor{
+        "delegating",
+        "Delegating test algorithm",
+        "Exercises descriptor plumbing.",
+        "custom",
+        true,
+        [creations, eventFlags](Map map, const bool recordEvents) {
+            ++*creations;
+            eventFlags->push_back(recordEvents);
+            return std::make_unique<DelegatingSearchSession>(std::move(map), recordEvents);
+        },
+    };
+    const Map map = roadMap(4, 3, {0, 0}, {3, 2});
+
+    const SearchResult result = pathx::solve(map, descriptor);
+    validateFoundPath(map, result);
+    CHECK(*creations == 1);
+    CHECK(*eventFlags == std::vector<bool>{false});
+}
+
+void testDescriptorBenchmarkUsesInjectedFactoryForEveryRun() {
+    const auto creations = std::make_shared<int>(0);
+    const AlgorithmDescriptor descriptor{
+        "delegating",
+        "Delegating test algorithm",
+        "Exercises descriptor benchmark plumbing.",
+        "custom",
+        true,
+        [creations](Map map, const bool recordEvents) {
+            ++*creations;
+            return std::make_unique<DelegatingSearchSession>(std::move(map), recordEvents);
+        },
+    };
+    const Map map = roadMap(4, 3, {0, 0}, {3, 2});
+
+    const auto measured = pathx::benchmark(map, descriptor, 3);
+    CHECK(measured.runs == 3);
+    CHECK(measured.result.status == SearchStatus::Found);
+    CHECK(*creations == 4);
+}
+
 void testMapStorageRoundTripsThroughStreams() {
     Map original{Grid(4, 3, Terrain::Plain), {0, 2}, {3, 0}};
     original.grid.set({0, 0}, Terrain::Road);
@@ -388,6 +576,19 @@ const std::vector<std::pair<std::string_view, TestFunction>> tests{
     {"search session owns an isolated map snapshot", testSearchSessionOwnsAnIsolatedMapSnapshot},
     {"repeated solves are deterministic", testRepeatedSolvesAreDeterministic},
     {"seeded random maps match an independent Bellman-Ford oracle", testSeededRandomMapsMatchBellmanFordOracle},
+    {"default map uses a 120 by 80 grid", testDefaultMapUsesOneHundredTwentyByEightyGrid},
+    {"breadth-first chooses minimum hops despite higher weighted cost", testBreadthFirstChoosesMinimumHopsDespiteHigherWeightedCost},
+    {"greedy returns a legal route without a lowest-cost guarantee", testGreedyReturnsLegalRouteWithoutLowestCostGuarantee},
+    {"breadth-first and greedy report no path", testBreadthFirstAndGreedyReportNoPath},
+    {"breadth-first and greedy handle a shared endpoint", testBreadthFirstAndGreedyHandleSharedEndpoint},
+    {"default registry provides four built-in algorithms", testDefaultRegistryProvidesFourBuiltinAlgorithms},
+    {"every default descriptor creates a session and finds a legal route", testEveryDefaultDescriptorCreatesSessionAndFindsLegalRoute},
+    {"registry rejects a duplicate identifier", testRegistryRejectsDuplicateIdentifier},
+    {"registry rejects an empty identifier", testRegistryRejectsEmptyIdentifier},
+    {"registry rejects a missing factory", testRegistryRejectsMissingFactory},
+    {"registry rejects an unknown identifier lookup", testRegistryRejectsUnknownIdentifierLookup},
+    {"descriptor solve uses the injected session factory", testDescriptorSolveUsesInjectedSessionFactory},
+    {"descriptor benchmark uses the injected factory for every run", testDescriptorBenchmarkUsesInjectedFactoryForEveryRun},
     {"map storage round-trips through streams", testMapStorageRoundTripsThroughStreams},
     {"map storage rejects unknown version", testMapStorageRejectsUnknownVersion},
     {"map storage rejects non-positive size", testMapStorageRejectsNonPositiveSize},

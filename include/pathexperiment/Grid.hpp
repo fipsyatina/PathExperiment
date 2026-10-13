@@ -17,7 +17,7 @@ enum class Terrain { Road, Plain, Swamp, Wall };
 
 class Grid {
 public:
-    explicit Grid(int width = 40, int height = 25, Terrain fill = Terrain::Plain);
+    explicit Grid(int width = 120, int height = 80, Terrain fill = Terrain::Plain);
     [[nodiscard]] int width() const noexcept;
     [[nodiscard]] int height() const noexcept;
     [[nodiscard]] std::size_t size() const noexcept;
@@ -36,8 +36,8 @@ private:
 
 struct Map {
     Grid grid{};
-    Point start{2, 12};
-    Point goal{37, 12};
+    Point start{8, 40};
+    Point goal{111, 40};
 };
 
 } // namespace pathx

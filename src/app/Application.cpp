@@ -1,4 +1,6 @@
 #include "Application.hpp"
+#include "Theme.hpp"
+#include <SFML/OpenGL.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -65,14 +67,14 @@ std::filesystem::path uniqueMapPath(const std::filesystem::path& directory) {
 }
 } // namespace
 
-const std::array<std::string, 5>& sampleFiles() {
-    static const std::array<std::string, 5> files{
-        "open.pemap", "maze.pemap", "weighted-detour.pemap", "blocked-goal.pemap", "narrow-passage.pemap"};
+const std::array<std::string, 6>& sampleFiles() {
+    static const std::array<std::string, 6> files{
+        "open.pemap", "maze.pemap", "weighted-detour.pemap", "blocked-goal.pemap", "narrow-passage.pemap", "large-weighted.pemap"};
     return files;
 }
-const std::array<std::string, 5>& sampleNames() {
-    static const std::array<std::string, 5> names{
-        "Open field", "Maze", "The cheaper detour", "Blocked goal", "Narrow passage"};
+const std::array<std::string, 6>& sampleNames() {
+    static const std::array<std::string, 6> names{
+        "Open field", "Maze", "The cheaper detour", "Blocked goal", "Narrow passage", "Weighted field"};
     return names;
 }
 
@@ -92,7 +94,9 @@ bool MapEditor::paint(Map& map, Point point, Tool tool, bool erase) {
     if (erase) tool = Tool::Plain;
     if (tool == Tool::Start || tool == Tool::Goal) {
         auto& endpoint = tool == Tool::Start ? map.start : map.goal;
-        if (!passable(map.grid.at(point)) || endpoint == point) return false;
+        const bool blocked = !passable(map.grid.at(point));
+        if (endpoint == point && !blocked) return false;
+        if (blocked) map.grid.set(point, Terrain::Plain);
         endpoint = point;
         return true;
     }
@@ -106,9 +110,10 @@ bool MapEditor::paint(Map& map, Point point, Tool tool, bool erase) {
 
 Application::Application(std::filesystem::path resources)
     : renderer_(resources),
-      window_(sf::VideoMode({1280u, 820u}), "PathExperiment | Pathfinding Lab") {
+      window_(sf::VideoMode({1280u, 820u}), "PathExperiment") {
     state_.resources = std::move(resources);
     state_.saveDirectory = userSaveDirectory(state_.resources);
+    state_.comparison.resize(state_.registry.algorithms().size());
     window_.setFramerateLimit(60);
     window_.setKeyRepeatEnabled(false);
     window_.setView(sf::View(sf::FloatRect({0.f, 0.f}, logicalSize)));
@@ -142,14 +147,33 @@ void Application::handleEvent(const sf::Event& event) {
         state_.speedDragging = false;
     } else if (const auto* moved = event.getIf<sf::Event::MouseMoved>()) {
         pointerMove(window_.mapPixelToCoords(moved->position));
+    } else if (const auto* wheel = event.getIf<sf::Event::MouseWheelScrolled>(); wheel && state_.algorithmMenuOpen) {
+        const auto count = state_.registry.algorithms().size();
+        if (wheel->delta < 0 && state_.algorithmMenuOffset + 6 < count) ++state_.algorithmMenuOffset;
+        else if (wheel->delta > 0 && state_.algorithmMenuOffset > 0) --state_.algorithmMenuOffset;
     } else if (const auto* pressed = event.getIf<sf::Event::MouseButtonPressed>()) {
-        if (pressed->button == sf::Mouse::Button::Left || pressed->button == sf::Mouse::Button::Right)
-            pointerDown(window_.mapPixelToCoords(pressed->position), pressed->button == sf::Mouse::Button::Right);
+        if (pressed->button == sf::Mouse::Button::Left || pressed->button == sf::Mouse::Button::Right) {
+            const bool shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+            const bool control = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
+            const std::optional<Tool> endpoint = shift ? std::optional(Tool::Start) : control ? std::optional(Tool::Goal) : std::nullopt;
+            pointerDown(window_.mapPixelToCoords(pressed->position), pressed->button == sf::Mouse::Button::Right, endpoint);
+        }
     } else if (event.is<sf::Event::MouseButtonReleased>()) {
         state_.dragging = false;
         state_.speedDragging = false;
     } else if (const auto* key = event.getIf<sf::Event::KeyPressed>()) {
         using Key = sf::Keyboard::Key;
+        if (state_.algorithmMenuOpen) {
+            const auto count = state_.registry.algorithms().size();
+            if (key->code == Key::Escape) { state_.algorithmMenuOpen = false; return; }
+            if (key->code == Key::Enter) { selectAlgorithm(state_.algorithmMenuCursor); return; }
+            if (key->code == Key::Down || key->code == Key::Up) {
+                state_.algorithmMenuCursor = (state_.algorithmMenuCursor + (key->code == Key::Down ? 1 : count - 1)) % count;
+                if (state_.algorithmMenuCursor < state_.algorithmMenuOffset) state_.algorithmMenuOffset = state_.algorithmMenuCursor;
+                if (state_.algorithmMenuCursor >= state_.algorithmMenuOffset + 6) state_.algorithmMenuOffset = state_.algorithmMenuCursor - 5;
+                return;
+            }
+        }
         if (key->control && key->code == Key::S) action(Action::Save);
         else if (key->control && key->code == Key::O) action(Action::Load);
         else if (key->code == Key::Space) action(Action::RunPause);
@@ -157,8 +181,7 @@ void Application::handleEvent(const sf::Event& event) {
         else if (key->code == Key::R) action(Action::Reset);
         else if (key->code == Key::C) action(Action::Clear);
         else if (key->code == Key::B) action(Action::Compare);
-        else if (key->code == Key::Tab)
-            action(state_.algorithm == Algorithm::AStar ? Action::Dijkstra : Action::AStar);
+        else if (key->code == Key::Tab) selectAlgorithm((state_.algorithmIndex + 1) % state_.registry.algorithms().size());
         else {
             const std::array keys{Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6};
             for (std::size_t index = 0; index < keys.size(); ++index)
@@ -167,8 +190,19 @@ void Application::handleEvent(const sf::Event& event) {
     }
 }
 
-void Application::pointerDown(sf::Vector2f position, bool erase) {
+void Application::pointerDown(sf::Vector2f position, bool erase, std::optional<Tool> endpoint) {
     state_.mouse = position;
+    if (state_.algorithmMenuOpen) {
+        const auto visible = std::min<std::size_t>(6, state_.registry.algorithms().size() - state_.algorithmMenuOffset);
+        for (std::size_t row = 0; row < visible; ++row) {
+            if (Renderer::algorithmOptionBounds(row).contains(position)) {
+                selectAlgorithm(state_.algorithmMenuOffset + row);
+                return;
+            }
+        }
+        state_.algorithmMenuOpen = false;
+        return;
+    }
     if (!erase) {
         for (int tool = 0; tool < 6; ++tool) {
             if (Renderer::toolBounds(tool).contains(position)) {
@@ -186,6 +220,15 @@ void Application::pointerDown(sf::Vector2f position, bool erase) {
         }
     }
     state_.hover = Renderer::cellAt(position, state_.map.grid);
+    if (!erase && endpoint && state_.hover) {
+        const auto tool = state_.tool;
+        state_.tool = *endpoint;
+        state_.erasing = false;
+        paint();
+        state_.tool = tool;
+        state_.dragging = false;
+        return;
+    }
     state_.dragging = state_.hover.has_value();
     state_.erasing = erase;
     if (state_.dragging) paint();
@@ -195,6 +238,12 @@ void Application::pointerMove(sf::Vector2f position) {
     const auto previous = state_.hover;
     state_.mouse = position;
     state_.hover = Renderer::cellAt(position, state_.map.grid);
+    if (state_.algorithmMenuOpen) {
+        const auto visible = std::min<std::size_t>(6, state_.registry.algorithms().size() - state_.algorithmMenuOffset);
+        for (std::size_t row = 0; row < visible; ++row)
+            if (Renderer::algorithmOptionBounds(row).contains(position)) state_.algorithmMenuCursor = state_.algorithmMenuOffset + row;
+        return;
+    }
     if (state_.speedDragging) { setSpeed(position.x); return; }
     if (!state_.dragging || !state_.hover) return;
     if (previous && state_.tool != Tool::Start && state_.tool != Tool::Goal) {
@@ -218,7 +267,7 @@ void Application::pointerMove(sf::Vector2f position) {
 void Application::paint() {
     if (state_.hover && MapEditor::paint(state_.map, *state_.hover, state_.tool, state_.erasing)) {
         resetSearch();
-        state_.comparison = {};
+        state_.comparison.assign(state_.registry.algorithms().size(), std::nullopt);
         state_.mapName = "Edited map";
         state_.message = "Map changed. The next search uses the new terrain.";
     }
@@ -238,20 +287,38 @@ void Application::resetSearch() {
     accumulator_ = 0.f;
 }
 
+void Application::selectAlgorithm(std::size_t index) {
+    if (index >= state_.registry.algorithms().size()) return;
+    if (index != state_.algorithmIndex) resetSearch();
+    state_.algorithmIndex = index;
+    state_.algorithmMenuCursor = index;
+    state_.algorithmMenuOpen = false;
+    const auto& descriptor = state_.registry.algorithms()[index];
+    state_.message = descriptor.name + ": priority " + descriptor.priorityFormula + ". " + descriptor.description;
+}
+
+void Application::startSearch() {
+    auto session = state_.registry.algorithms().at(state_.algorithmIndex).create(state_.map, true);
+    if (!session) throw std::runtime_error("Algorithm factory returned no session.");
+    state_.search = std::move(session);
+    accumulator_ = 0.f;
+}
+
 void Application::action(Action requested) {
     try {
+        if (requested != Action::AlgorithmMenu) state_.algorithmMenuOpen = false;
+        state_.dragging = false;
+        state_.speedDragging = false;
         switch (requested) {
-        case Action::Dijkstra:
-        case Action::AStar: {
-            const auto algorithm = requested == Action::Dijkstra ? Algorithm::Dijkstra : Algorithm::AStar;
-            if (state_.algorithm != algorithm) { resetSearch(); state_.algorithm = algorithm; }
-            state_.message = algorithm == Algorithm::AStar ? "A*: next cell minimizes f = g + h." : "Dijkstra: next cell minimizes accumulated cost g.";
+        case Action::AlgorithmMenu: {
+            state_.algorithmMenuOpen = !state_.algorithmMenuOpen;
+            state_.algorithmMenuCursor = state_.algorithmIndex;
+            state_.algorithmMenuOffset = state_.algorithmIndex >= 6 ? state_.algorithmIndex - 5 : 0;
             break;
         }
         case Action::RunPause:
             if (!state_.search || state_.search->result().status != SearchStatus::Searching) {
-                state_.search = std::make_unique<SearchSession>(state_.map, state_.algorithm);
-                accumulator_ = 0.f;
+                startSearch();
                 state_.running = state_.search->result().status == SearchStatus::Searching;
             } else state_.running = !state_.running;
             state_.message = state_.running ? "Searching... blue branches are explored; orange is the current candidate." : "Paused. Press N to expand exactly one cell.";
@@ -259,29 +326,34 @@ void Application::action(Action requested) {
         case Action::Step:
             state_.running = false;
             if (!state_.search || state_.search->result().status != SearchStatus::Searching)
-                state_.search = std::make_unique<SearchSession>(state_.map, state_.algorithm);
+                startSearch();
             advance();
             break;
         case Action::Reset:
             resetSearch();
             state_.message = "Search cleared. Your map is ready for another experiment.";
             break;
+        case Action::Finish:
+            state_.running = false;
+            if (!state_.search || state_.search->result().status != SearchStatus::Searching) startSearch();
+            while (state_.search->result().status == SearchStatus::Searching) advance();
+            break;
         case Action::Clear:
             resetSearch();
-            state_.comparison = {};
+            state_.comparison.assign(state_.registry.algorithms().size(), std::nullopt);
             state_.map = Map{};
             state_.mapName = "Untitled map";
             state_.hover.reset();
-            state_.message = "Empty 40 x 25 map. Choose a brush and draw.";
+            state_.message = "New 120 x 80 map. Draw terrain; Shift-click to place start, Ctrl-click to place goal.";
             break;
         case Action::Compare:
             state_.running = false;
-            state_.comparison[0] = benchmark(state_.map, Algorithm::Dijkstra);
-            state_.comparison[1] = benchmark(state_.map, Algorithm::AStar);
+            for (std::size_t index = 0; index < state_.registry.algorithms().size(); ++index)
+                state_.comparison[index] = benchmark(state_.map, state_.registry.algorithms()[index]);
             state_.message = "Compared on the same map: median of 31 runs, with no rendering or delays.";
             break;
-        case Action::PreviousSample: state_.sampleIndex = (state_.sampleIndex + 4) % 5; break;
-        case Action::NextSample: state_.sampleIndex = (state_.sampleIndex + 1) % 5; break;
+        case Action::PreviousSample: state_.sampleIndex = (state_.sampleIndex + 5) % 6; break;
+        case Action::NextSample: state_.sampleIndex = (state_.sampleIndex + 1) % 6; break;
         case Action::LoadSample: loadSample(state_.sampleIndex); break;
         case Action::Save: save(); break;
         case Action::Load: load(); break;
@@ -298,7 +370,9 @@ void Application::advance() {
     const auto& result = state_.search->result();
     if (result.status == SearchStatus::Found) {
         state_.running = false;
-        state_.message = "Route found. Green = optimal route; blue = explored branches outside the route.";
+        state_.message = state_.registry.algorithms()[state_.algorithmIndex].guaranteesLowestCost
+            ? "Minimum-cost route found. Green: route; blue: explored branches."
+            : "Route found. This algorithm does not guarantee minimum weighted cost.";
     } else if (result.status == SearchStatus::NoPath) {
         state_.running = false;
         state_.message = "No route. Every reachable cell was explored; the goal cannot be reached.";
@@ -321,12 +395,12 @@ void Application::update(float seconds) {
 void Application::loadSample(int index) {
     auto map = loadMap(state_.resources / "maps" / sampleFiles().at(static_cast<std::size_t>(index)));
     resetSearch();
-    state_.comparison = {};
+    state_.comparison.assign(state_.registry.algorithms().size(), std::nullopt);
     state_.map = std::move(map);
     state_.hover.reset();
     state_.sampleIndex = index;
     state_.mapName = sampleNames().at(static_cast<std::size_t>(index));
-    state_.message = "Example loaded. Run both algorithms on these exact conditions.";
+    state_.message = "Example loaded. Select an algorithm and run, pause or step through its decisions.";
 }
 
 void Application::save() {
@@ -366,7 +440,7 @@ void Application::load() {
 #endif
     auto map = loadMap(chosen); // Parse first; a bad file never discards the current experiment.
     resetSearch();
-    state_.comparison = {};
+    state_.comparison.assign(state_.registry.algorithms().size(), std::nullopt);
     state_.map = std::move(map);
     state_.hover.reset();
     state_.mapName = chosen.stem().string();
@@ -374,30 +448,27 @@ void Application::load() {
 }
 
 void Application::render() {
-    window_.clear(sf::Color(12, 18, 28));
+    window_.clear(theme::background);
     renderer_.draw(window_, state_);
     window_.display();
 }
 
 void Application::capture(const std::filesystem::path& path) {
-    const auto started = std::chrono::steady_clock::now();
     // Capture the back buffer before display swaps it. Reading after display
     // can return the previous frame on double-buffered Windows drivers.
-    window_.clear(sf::Color(12, 18, 28));
+    window_.clear(theme::background);
     renderer_.draw(window_, state_);
-    const auto drawn = std::chrono::steady_clock::now();
-    sf::Texture texture(window_.getSize());
-    texture.update(window_);
-    const auto pixels = texture.copyToImage();
-    const auto copied = std::chrono::steady_clock::now();
+    // Direct framebuffer readback also works on software OpenGL where maximum
+    // texture size can be 1024, smaller than the desktop window (CI runners).
+    const auto size = window_.getSize();
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size.x) * size.y * 4);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, static_cast<GLsizei>(size.x), static_cast<GLsizei>(size.y), GL_RGBA, GL_UNSIGNED_BYTE, bytes.data());
+    sf::Image pixels(size, bytes.data());
+    pixels.flipVertically();
     if (!pixels.saveToFile(path)) throw std::runtime_error("Could not save capture.");
-    const auto saved = std::chrono::steady_clock::now();
     window_.display();
-    const auto displayed = std::chrono::steady_clock::now();
-    const auto milliseconds = [](auto from, auto to) { return std::chrono::duration<double, std::milli>(to - from).count(); };
-    std::ofstream profile(path.parent_path() / "capture-profile.csv", std::ios::app);
-    profile << path.filename().string() << ',' << milliseconds(started, drawn) << ',' << milliseconds(drawn, copied)
-            << ',' << milliseconds(copied, saved) << ',' << milliseconds(saved, displayed) << '\n';
 }
 
 void Application::expect(bool condition, const std::string& message) const {
@@ -408,101 +479,129 @@ int Application::smokeTest(const std::filesystem::path& requestedOutput) {
     const auto output = createCaptureDirectory(requestedOutput);
     state_.saveDirectory = output / "saved-maps";
     capture(output / "empty.png");
-    // Drive the same pointer/key event handlers as normal interaction.
+    const auto pointPixel = [&](Point point) { return Renderer::cellCenter(point, state_.map.grid); };
+    const auto release = [&] { state_.dragging = false; state_.speedDragging = false; };
     handleEvent(sf::Event::KeyPressed{.code = sf::Keyboard::Key::Num4});
-    handleEvent(sf::Event::MouseButtonPressed{sf::Mouse::Button::Left, {144, 248}});
-    handleEvent(sf::Event::MouseButtonReleased{sf::Mouse::Button::Left, {144, 248}});
+    pointerDown(pointPixel({4, 2}), false);
+    release();
     expect(state_.map.grid.at({4, 2}) == Terrain::Wall, "wall brush did not paint");
-    handleEvent(sf::Event::MouseButtonPressed{sf::Mouse::Button::Right, {144, 248}});
-    handleEvent(sf::Event::MouseButtonReleased{sf::Mouse::Button::Right, {144, 248}});
-    expect(state_.map.grid.at({4, 2}) == Terrain::Plain, "right erase did not restore plain");
+    pointerDown(pointPixel({4, 2}), true);
+    release();
+    expect(state_.map.grid.at({4, 2}) == Terrain::Plain, "right erase failed");
     state_.tool = Tool::Road;
-    pointerDown({144.f, 248.f}, false);
-    pointerMove({224.f, 248.f});
-    state_.dragging = false;
+    pointerDown(pointPixel({4, 2}), false);
+    pointerMove(pointPixel({8, 2}));
+    release();
     for (int x = 4; x <= 8; ++x) expect(state_.map.grid.at({x, 2}) == Terrain::Road, "drag brush left a gap");
-    state_.tool = Tool::Start;
-    pointerDown({144.f, 248.f}, false);
-    state_.dragging = false;
-    expect(state_.map.start == Point{4, 2}, "start placement failed");
-    state_.tool = Tool::Goal;
-    pointerDown({224.f, 248.f}, false);
-    state_.dragging = false;
-    expect(state_.map.goal == Point{8, 2}, "goal placement failed");
-    pointerDown({1230.f, 328.f}, false);
-    pointerMove({1234.f, 328.f});
-    state_.speedDragging = false;
+    pointerDown(pointPixel({5, 3}), true);
+    release();
+    state_.map.grid.set({119, 79}, Terrain::Wall);
+    pointerDown(pointPixel({119, 79}), false, Tool::Start);
+    expect(state_.map.start == Point{119, 79} && state_.map.grid.at({119, 79}) == Terrain::Plain, "arbitrary start placement on a wall failed");
+    pointerDown(pointPixel({0, 0}), false, Tool::Goal);
+    expect(state_.map.goal == Point{0, 0}, "arbitrary goal placement failed");
+    expect(state_.tool == Tool::Road, "endpoint shortcut changed the brush");
+    capture(output / "endpoints.png");
+    pointerDown(pointPixel({0, 0}), false, Tool::Start);
+    action(Action::Step);
+    expect(state_.search->result().status == SearchStatus::Found && state_.search->result().cost == 0, "shared endpoint failed in the UI");
+    capture(output / "shared-endpoint.png");
+    pointerDown({1100.f, 140.f}, false);
+    expect(state_.algorithmMenuOpen, "algorithm selector did not open");
+    capture(output / "algorithm-menu.png");
+    pointerDown({1100.f, 240.f}, false);
+    expect(state_.algorithmIndex == 2 && !state_.algorithmMenuOpen, "BFS selection failed");
+    handleEvent(sf::Event::KeyPressed{.code = sf::Keyboard::Key::Tab});
+    expect(state_.algorithmIndex == 3, "Tab did not select Greedy");
+    action(Action::AlgorithmMenu);
+    handleEvent(sf::Event::KeyPressed{.code = sf::Keyboard::Key::Up});
+    handleEvent(sf::Event::KeyPressed{.code = sf::Keyboard::Key::Enter});
+    expect(state_.algorithmIndex == 2, "keyboard menu selection failed");
+    selectAlgorithm(1);
+    pointerDown({1250.f, 386.f}, false);
+    pointerMove({1256.f, 386.f});
+    release();
     expect(state_.stepsPerSecond > 59.f, "speed slider failed");
     state_.stepsPerSecond = 24.f;
     action(Action::Clear);
+    expect(state_.map.grid.size() == 9600, "New did not create 120 x 80");
     action(Action::Step);
-    expect(state_.search && state_.search->result().expanded == 1, "single step did not expand exactly one cell");
+    expect(state_.search && state_.search->result().expanded == 1, "single step must expand one cell");
     expect(!state_.running, "step must stay paused");
     const auto expanded = state_.search->result().expanded;
-    update(0.5f);
+    update(.5f);
     expect(state_.search->result().expanded == expanded, "paused search advanced");
     capture(output / "single-step.png");
     action(Action::RunPause);
-    const auto beforeStall = state_.search->result().expanded;
     update(1.f);
-    expect(state_.search->result().expanded == beforeStall + 1, "visual mode skipped steps during a stall");
+    expect(state_.search->result().expanded == expanded + 1, "visual mode skipped expansions after a stall");
     action(Action::RunPause);
     loadSample(2);
-    pointerDown({1000.f, 209.f}, false); // Run button.
-    expect(state_.running, "Run button did not start visual search");
-    update(0.1f);
+    pointerDown({1060.f, 279.f}, false);
+    expect(state_.running, "Run button did not start");
+    update(.1f);
     expect(state_.search->result().expanded > 0, "Run did not advance");
-    pointerDown({1000.f, 209.f}, false); // Pause button.
+    pointerDown({1060.f, 279.f}, false);
     expect(!state_.running, "Pause button did not pause");
-    for (int count = 0; count < 120 && state_.search->result().status == SearchStatus::Searching; ++count) advance();
+    for (int count = 0; count < 80 && state_.search->result().status == SearchStatus::Searching; ++count) advance();
     capture(output / "searching.png");
-    while (state_.search->result().status == SearchStatus::Searching) advance();
-    expect(state_.search->result().status == SearchStatus::Found, "weighted example should have route");
+    pointerDown({1190.f, 319.f}, false);
+    expect(state_.search->result().status == SearchStatus::Found, "Finish did not complete");
     action(Action::Compare);
-    expect(state_.comparison[0] && state_.comparison[1], "comparison is missing");
-    expect(state_.comparison[0]->result.cost == state_.comparison[1]->result.cost, "algorithm costs differ");
+    expect(state_.comparison.size() == state_.registry.algorithms().size(), "comparison omitted algorithms");
+    for (const auto& measured : state_.comparison) expect(measured && measured->runs == 31, "algorithm benchmark missing");
+    expect(state_.comparison[0]->result.cost == state_.comparison[1]->result.cost, "optimal algorithm costs differ");
     capture(output / "comparison.png");
-    state_.hover = state_.map.start;
-    capture(output / "hover.png");
-    state_.hover.reset();
     save();
     int savedCount{};
     for (const auto& item : std::filesystem::directory_iterator(state_.saveDirectory)) {
         if (item.path().extension() != ".pemap") continue;
         const auto restored = loadMap(item.path());
         expect(restored.start == state_.map.start && restored.goal == state_.map.goal, "saved endpoints differ");
-        expect(solve(restored, Algorithm::AStar).cost == state_.search->result().cost, "saved terrain differs");
+        expect(solve(restored, state_.registry.get("astar")).cost == state_.search->result().cost, "saved terrain differs");
         ++savedCount;
     }
-    expect(savedCount > 0, "save did not produce a map");
-    state_.hover = Point{12, 12};
+    expect(savedCount > 0, "save produced no map");
     state_.tool = Tool::Wall;
-    paint();
-    expect(!state_.search && !state_.comparison[0] && !state_.running, "editing failed to invalidate old results");
-    for (int index = 0; index < 5; ++index) {
+    pointerDown(pointPixel({12, 12}), false);
+    release();
+    expect(!state_.search && !state_.comparison[0] && !state_.running, "editing retained stale results");
+    for (int index = 0; index < static_cast<int>(sampleFiles().size()); ++index) {
         loadSample(index);
-        const auto first = solve(state_.map, Algorithm::Dijkstra);
-        const auto second = solve(state_.map, Algorithm::AStar);
-        expect(first.status == second.status && first.cost == second.cost, "sample algorithms disagree");
+        const auto first = solve(state_.map, state_.registry.get("dijkstra"));
+        const auto second = solve(state_.map, state_.registry.get("astar"));
+        expect(first.status == second.status && first.cost == second.cost, "sample optimal algorithms disagree");
         expect(first.status == (index == 3 ? SearchStatus::NoPath : SearchStatus::Found), "unexpected sample reachability");
     }
+    loadSample(2);
+    for (std::size_t index = 0; index < state_.registry.algorithms().size(); ++index) {
+        selectAlgorithm(index);
+        action(Action::Step);
+        expect(state_.search->result().expanded == 1, "registered algorithm cannot single-step");
+        action(Action::Finish);
+        expect(state_.search->result().status == SearchStatus::Found, "registered algorithm cannot finish");
+        capture(output / (state_.registry.algorithms()[index].id + ".png"));
+    }
+    selectAlgorithm(1);
     loadSample(3);
-    action(Action::RunPause);
-    while (state_.search->result().status == SearchStatus::Searching) advance();
+    action(Action::Finish);
     expect(!state_.running && state_.search->result().status == SearchStatus::NoPath, "no-path did not stop");
     capture(output / "no-path.png");
     std::ofstream report(output / "smoke-report.txt", std::ios::app);
-    report << "PASS: native SFML rendering; wall/erase input events; drag brush; start/goal placement; speed slider; single-step; pause; Run/Pause clicks; "
-              "weighted route; both benchmarks; timestamp save/reload; stale-result invalidation; all five examples; no-path.\n";
+    report << "PASS: native light workbench; 120x80 field; wall/erase/drag; arbitrary endpoints and wall clearing; "
+              "algorithm dropdown/mouse/keyboard; all registry sessions and benchmarks; step/pause/stall/Finish; "
+              "save/reload; stale invalidation; six examples; no-path; framebuffer capture.\n";
     window_.close();
     return 0;
 }
 
 int Application::recordDemo(const std::filesystem::path& requestedOutput) {
     const auto output = createCaptureDirectory(requestedOutput);
-    loadSample(2);
-    state_.algorithm = Algorithm::AStar;
+    loadSample(5);
+    selectAlgorithm(1);
     state_.stepsPerSecond = 12.f;
+    const auto work = solve(state_.map, state_.registry.get("astar")).expanded;
+    const auto stride = std::max<std::size_t>(1, work / 120);
     action(Action::RunPause);
     int frame{};
     const auto framePath = [&] {
@@ -512,12 +611,32 @@ int Application::recordDemo(const std::filesystem::path& requestedOutput) {
     };
     capture(framePath());
     while (state_.search->result().status == SearchStatus::Searching) {
-        advance();
+        for (std::size_t step = 0; step < stride && state_.search->result().status == SearchStatus::Searching; ++step) advance();
         capture(framePath());
+        while (const auto event = window_.pollEvent()) if (event->is<sf::Event::Closed>()) { window_.close(); return 1; }
     }
     action(Action::Compare);
     capture(output / "comparison.png");
     for (int hold = 0; hold < 16; ++hold) capture(framePath());
+    window_.close();
+    return 0;
+}
+
+int Application::recordAlgorithms(const std::filesystem::path& requestedOutput) {
+    const auto output = createCaptureDirectory(requestedOutput);
+    loadSample(5);
+    for (std::size_t index = 0; index < state_.registry.algorithms().size(); ++index) {
+        selectAlgorithm(index);
+        action(Action::RunPause);
+        const auto work = solve(state_.map, state_.registry.algorithms()[index]).expanded;
+        const auto preview = std::min<std::size_t>(work > 1 ? work - 1 : 1, std::max<std::size_t>(20, work / 3));
+        for (std::size_t step = 0; step < preview && state_.search->result().status == SearchStatus::Searching; ++step) advance();
+        state_.running = false;
+        capture(output / (state_.registry.algorithms()[index].id + "-search.png"));
+        action(Action::Finish);
+        action(Action::Compare);
+        capture(output / (state_.registry.algorithms()[index].id + "-result.png"));
+    }
     window_.close();
     return 0;
 }

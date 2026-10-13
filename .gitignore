@@ -3,6 +3,8 @@
 /artifacts/
 /saved-maps/
 /.omx/
+/AGENTS.md
+/DESIGN.md
 /.vs/
 /.vscode/
 CMakeUserPresets.json

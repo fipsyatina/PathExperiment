@@ -2,6 +2,7 @@
 
 #include "pathexperiment/MapStorage.hpp"
 #include "pathexperiment/Search.hpp"
+#include "pathexperiment/AlgorithmRegistry.hpp"
 #include <SFML/Graphics.hpp>
 #include <array>
 #include <filesystem>
@@ -15,7 +16,7 @@
 namespace pathx {
 
 enum class Tool { Road, Plain, Swamp, Wall, Start, Goal };
-enum class Action { Dijkstra, AStar, RunPause, Step, Reset, Clear, Compare, PreviousSample, NextSample, LoadSample, Save, Load };
+enum class Action { AlgorithmMenu, RunPause, Step, Reset, Finish, Clear, Compare, PreviousSample, NextSample, LoadSample, Save, Load };
 
 class MapEditor {
 public:
@@ -24,10 +25,14 @@ public:
 
 struct AppState {
     Map map{};
-    Algorithm algorithm{Algorithm::AStar};
+    AlgorithmRegistry registry{makeDefaultRegistry()};
+    std::size_t algorithmIndex{1};
     Tool tool{Tool::Wall};
-    std::unique_ptr<SearchSession> search{};
-    std::array<std::optional<BenchmarkResult>, 2> comparison{};
+    std::unique_ptr<ISearchSession> search{};
+    std::vector<std::optional<BenchmarkResult>> comparison{};
+    bool algorithmMenuOpen{};
+    std::size_t algorithmMenuCursor{1};
+    std::size_t algorithmMenuOffset{};
     bool running{};
     bool dragging{};
     bool erasing{};
@@ -36,7 +41,7 @@ struct AppState {
     float stepAge{1.f};
     std::optional<Point> hover{};
     sf::Vector2f mouse{-1.f, -1.f};
-    int sampleIndex{};
+    int sampleIndex{5};
     std::string mapName{"Untitled map"};
     std::string message{"Draw terrain, place S and G, then run an experiment."};
     std::filesystem::path resources{};
@@ -58,7 +63,9 @@ public:
     [[nodiscard]] static std::vector<ButtonSpec> buttons(const AppState& state);
     [[nodiscard]] static sf::FloatRect toolBounds(int tool);
     [[nodiscard]] static sf::FloatRect speedBounds();
+    [[nodiscard]] static sf::FloatRect algorithmOptionBounds(std::size_t visibleIndex);
     [[nodiscard]] static std::optional<Point> cellAt(sf::Vector2f position, const Grid& grid);
+    [[nodiscard]] static sf::Vector2f cellCenter(Point point, const Grid& grid);
 private:
     void text(sf::RenderTarget& target, const std::string& value, float x, float y,
               unsigned int size, sf::Color color, bool bold = false) const;
@@ -82,16 +89,19 @@ public:
     int run();
     int smokeTest(const std::filesystem::path& output);
     int recordDemo(const std::filesystem::path& output);
+    int recordAlgorithms(const std::filesystem::path& output);
 private:
     void action(Action action);
     void advance();
     void resetSearch();
     void update(float seconds);
     void handleEvent(const sf::Event& event);
-    void pointerDown(sf::Vector2f position, bool erase);
+    void pointerDown(sf::Vector2f position, bool erase, std::optional<Tool> endpoint = {});
     void pointerMove(sf::Vector2f position);
     void paint();
     void setSpeed(float x);
+    void selectAlgorithm(std::size_t index);
+    void startSearch();
     void capture(const std::filesystem::path& path);
     void loadSample(int index);
     void save();
@@ -105,7 +115,7 @@ private:
 };
 
 [[nodiscard]] std::filesystem::path findResources(const std::filesystem::path& executable);
-[[nodiscard]] const std::array<std::string, 5>& sampleFiles();
-[[nodiscard]] const std::array<std::string, 5>& sampleNames();
+[[nodiscard]] const std::array<std::string, 6>& sampleFiles();
+[[nodiscard]] const std::array<std::string, 6>& sampleNames();
 
 } // namespace pathx
