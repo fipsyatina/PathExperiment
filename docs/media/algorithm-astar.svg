@@ -2,26 +2,27 @@
   <title id="title">A-star search flow with Manhattan heuristic</title>
   <desc id="desc">A-star expands the cell with the smallest f equal to g plus h. Manhattan distance estimates remaining cost without exceeding it on this four-direction grid.</desc>
   <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#475569"/></marker></defs>
-  <rect width="960" height="400" rx="18" fill="#f8fafc"/>
-  <text x="36" y="48" font-family="system-ui,sans-serif" font-size="25" font-weight="700" fill="#111827">A* — priority = f = g + h</text>
-  <text x="36" y="78" font-family="system-ui,sans-serif" font-size="15" fill="#475569">Keep Dijkstra’s real cost, then add a lower-bound estimate toward the goal.</text>
-  <g font-family="system-ui,sans-serif" font-size="15" text-anchor="middle">
-    <rect x="36" y="116" width="176" height="62" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/><text x="124" y="142" fill="#111827">Start with g = 0</text><text x="124" y="163" fill="#475569">compute h</text>
+  <rect width="960" height="400" fill="#ffffff"/>
+  <text x="36" y="48" font-family="Arial,Helvetica,sans-serif" font-size="25" font-weight="700" fill="#111827">A* — priority = f = g + h</text>
+  <text x="36" y="78" font-family="Arial,Helvetica,sans-serif" font-size="15" fill="#475569">Keep Dijkstra’s real cost, then add a lower-bound estimate toward the goal.</text>
+  <g font-family="Arial,Helvetica,sans-serif" font-size="15" text-anchor="middle">
+    <rect x="36" y="116" width="176" height="62" rx="2" fill="#e0ebf5" stroke="#245b89" stroke-width="2"/><text x="124" y="142" fill="#111827">Queue start</text><text x="124" y="163" fill="#475569">g = 0, f = h</text>
     <path d="M212 147H249" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="251" y="116" width="190" height="62" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="2"/><text x="346" y="142" fill="#111827">Pop minimum f</text><text x="346" y="163" fill="#475569">stable FIFO on ties</text>
+    <rect x="251" y="116" width="190" height="62" rx="2" fill="#ffffff" stroke="#64748b" stroke-width="2"/><text x="346" y="142" fill="#111827">Pop live minimum f</text><text x="346" y="163" fill="#475569">goal? return route</text>
     <path d="M441 147H478" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="480" y="116" width="210" height="62" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="2"/><text x="585" y="142" fill="#111827">Relax using real cost</text><text x="585" y="163" fill="#475569">g′ = g + entry cost</text>
+    <rect x="480" y="116" width="210" height="62" rx="2" fill="#ffffff" stroke="#64748b" stroke-width="2"/><text x="585" y="142" fill="#111827">Relax using real cost</text><text x="585" y="163" fill="#475569">g′ = g + entry cost</text>
     <path d="M690 147H727" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="729" y="116" width="195" height="62" rx="10" fill="#dcfce7" stroke="#0f766e" stroke-width="2"/><text x="826" y="142" fill="#111827">Push with g′ + h</text><text x="826" y="163" fill="#475569">stop when goal pops</text>
+    <rect x="729" y="116" width="195" height="62" rx="2" fill="#e3f2ea" stroke="#1d8258" stroke-width="2"/><text x="826" y="142" fill="#111827">Push with g′ + h</text><text x="826" y="163" fill="#475569">update parents</text>
   </g>
-  <text x="36" y="235" font-family="system-ui,sans-serif" font-size="17" font-weight="700" fill="#111827">Why Manhattan is safe here</text>
+  <text x="36" y="235" font-family="Arial,Helvetica,sans-serif" font-size="17" font-weight="700" fill="#111827">Why Manhattan is safe here</text>
   <g transform="translate(50 260)">
     <g fill="#ffffff" stroke="#cbd5e1"><rect x="0" y="0" width="44" height="44"/><rect x="44" y="0" width="44" height="44"/><rect x="88" y="0" width="44" height="44"/><rect x="132" y="0" width="44" height="44"/><rect x="176" y="0" width="44" height="44"/><rect x="0" y="44" width="44" height="44"/><rect x="44" y="44" width="44" height="44"/><rect x="88" y="44" width="44" height="44"/><rect x="132" y="44" width="44" height="44"/><rect x="176" y="44" width="44" height="44"/><rect x="0" y="88" width="44" height="44"/><rect x="44" y="88" width="44" height="44"/><rect x="88" y="88" width="44" height="44"/><rect x="132" y="88" width="44" height="44"/><rect x="176" y="88" width="44" height="44"/></g>
-    <rect x="0" y="88" width="44" height="44" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/><text x="22" y="116" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700">n</text>
-    <rect x="176" y="0" width="44" height="44" fill="#dcfce7" stroke="#0f766e" stroke-width="2"/><text x="198" y="28" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700">G</text>
+    <rect x="0" y="88" width="44" height="44" fill="#e0ebf5" stroke="#245b89" stroke-width="2"/><text x="22" y="116" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700">n</text>
+    <rect x="176" y="0" width="44" height="44" fill="#e3f2ea" stroke="#1d8258" stroke-width="2"/><text x="198" y="28" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700">G</text>
     <path d="M22 88V66H198V44" fill="none" stroke="#b45309" stroke-width="5" marker-end="url(#arrow)"/>
   </g>
-  <text x="320" y="285" font-family="system-ui,sans-serif" font-size="18" fill="#111827">h(n) = |xₙ − xG| + |yₙ − yG|</text>
-  <text x="320" y="320" font-family="system-ui,sans-serif" font-size="15" fill="#475569">Every valid move changes one coordinate by 1, and every entry costs at least 1.</text>
-  <text x="320" y="349" font-family="system-ui,sans-serif" font-size="15" fill="#475569">Therefore h(n) ≤ true remaining cost; it is also consistent across every edge.</text>
+  <text x="320" y="285" font-family="Arial,Helvetica,sans-serif" font-size="18" fill="#111827">h(n) = |xₙ − xG| + |yₙ − yG|</text>
+  <text x="320" y="320" font-family="Arial,Helvetica,sans-serif" font-size="15" fill="#475569">Each orthogonal move costs at least 1.</text>
+  <text x="320" y="349" font-family="Arial,Helvetica,sans-serif" font-size="15" fill="#475569">Manhattan distance is a lower bound.</text>
+  <text x="320" y="378" font-family="Arial,Helvetica,sans-serif" font-size="15" fill="#475569">Consistency: h(n) ≤ w(n′) + h(n′).</text>
 </svg>

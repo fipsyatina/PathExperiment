@@ -2,25 +2,25 @@
   <title id="title">Dijkstra search flow and weighted-route choice</title>
   <desc id="desc">Dijkstra repeatedly expands the open cell with the smallest accumulated cost g, relaxes four neighbors, and finds the fourteen-cost road detour instead of the ten-step route costing fifty.</desc>
   <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#475569"/></marker></defs>
-  <rect width="960" height="400" rx="18" fill="#f8fafc"/>
-  <text x="36" y="48" font-family="system-ui,sans-serif" font-size="25" font-weight="700" fill="#111827">Dijkstra — priority = g</text>
-  <text x="36" y="78" font-family="system-ui,sans-serif" font-size="15" fill="#475569">Expand the cheapest known prefix; terrain cost decides the route.</text>
-  <g font-family="system-ui,sans-serif" font-size="15" text-anchor="middle">
-    <rect x="36" y="116" width="170" height="62" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/><text x="121" y="142" fill="#111827">Push start</text><text x="121" y="163" fill="#475569">g(S) = 0</text>
+  <rect width="960" height="400" fill="#ffffff"/>
+  <text x="36" y="48" font-family="Arial,Helvetica,sans-serif" font-size="25" font-weight="700" fill="#111827">Dijkstra — priority = g</text>
+  <text x="36" y="78" font-family="Arial,Helvetica,sans-serif" font-size="15" fill="#475569">Expand the cheapest known prefix; terrain cost decides the route.</text>
+  <g font-family="Arial,Helvetica,sans-serif" font-size="15" text-anchor="middle">
+    <rect x="36" y="116" width="170" height="62" rx="2" fill="#e0ebf5" stroke="#245b89" stroke-width="2"/><text x="121" y="142" fill="#111827">Push start</text><text x="121" y="163" fill="#475569">g(S) = 0</text>
     <path d="M206 147H244" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="246" y="116" width="190" height="62" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="2"/><text x="341" y="142" fill="#111827">Pop minimum g</text><text x="341" y="163" fill="#475569">skip stale entries</text>
+    <rect x="246" y="116" width="190" height="62" rx="2" fill="#ffffff" stroke="#64748b" stroke-width="2"/><text x="341" y="142" fill="#111827">Pop live minimum g</text><text x="341" y="163" fill="#475569">goal? return route</text>
     <path d="M436 147H474" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="476" y="116" width="210" height="62" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="2"/><text x="581" y="142" fill="#111827">Relax 4 neighbors</text><text x="581" y="163" fill="#475569">new g = g + entry cost</text>
+    <rect x="476" y="116" width="210" height="62" rx="2" fill="#ffffff" stroke="#64748b" stroke-width="2"/><text x="581" y="142" fill="#111827">Relax 4 neighbors</text><text x="581" y="163" fill="#475569">new g = g + entry cost</text>
     <path d="M686 147H724" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
-    <rect x="726" y="116" width="198" height="62" rx="10" fill="#dcfce7" stroke="#0f766e" stroke-width="2"/><text x="825" y="142" fill="#111827">Goal popped?</text><text x="825" y="163" fill="#475569">reconstruct parents</text>
+    <rect x="726" y="116" width="198" height="62" rx="2" fill="#e3f2ea" stroke="#1d8258" stroke-width="2"/><text x="825" y="142" fill="#111827">Update parents</text><text x="825" y="163" fill="#475569">push improvements</text>
   </g>
   <path d="M825 178V201H341V180" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
-  <text x="594" y="197" font-family="system-ui,sans-serif" font-size="13" fill="#475569">no: continue</text>
-  <text x="36" y="240" font-family="system-ui,sans-serif" font-size="17" font-weight="700" fill="#111827">Illustrative weighted choice</text>
-  <circle cx="92" cy="310" r="24" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="92" y="316" text-anchor="middle" font-family="system-ui,sans-serif" font-size="18" font-weight="700" fill="#111827">S</text>
-  <circle cx="870" cy="310" r="24" fill="#dcfce7" stroke="#0f766e" stroke-width="3"/><text x="870" y="316" text-anchor="middle" font-family="system-ui,sans-serif" font-size="18" font-weight="700" fill="#111827">G</text>
+  <text x="594" y="197" font-family="Arial,Helvetica,sans-serif" font-size="13" fill="#475569">repeat while frontier is not empty</text>
+  <text x="36" y="225" font-family="Arial,Helvetica,sans-serif" font-size="17" font-weight="700" fill="#111827">Illustrative weighted choice</text>
+  <circle cx="92" cy="310" r="24" fill="#e0ebf5" stroke="#245b89" stroke-width="3"/><text x="92" y="316" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="700" fill="#111827">S</text>
+  <circle cx="870" cy="310" r="24" fill="#e3f2ea" stroke="#1d8258" stroke-width="3"/><text x="870" y="316" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="700" fill="#111827">G</text>
   <path d="M116 300C310 245 650 245 846 300" fill="none" stroke="#b91c1c" stroke-width="7" stroke-dasharray="10 7"/>
-  <text x="480" y="265" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" fill="#991b1b">10 swamp entries × 5 = cost 50</text>
-  <path d="M116 321C310 378 650 378 846 321" fill="none" stroke="#0f766e" stroke-width="7"/>
-  <text x="480" y="378" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" font-weight="700" fill="#0f766e">chosen: 14 road entries × 1 = cost 14</text>
+  <text x="480" y="252" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="15" fill="#991b1b">10 swamp entries × 5 = cost 50</text>
+  <path d="M116 321C310 378 650 378 846 321" fill="none" stroke="#1d8258" stroke-width="7"/>
+  <text x="480" y="390" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="15" font-weight="700" fill="#1d8258">chosen: 14 road entries × 1 = cost 14</text>
 </svg>
